@@ -49,3 +49,26 @@ export function createPcmBlob(data: Float32Array): Blob {
     mimeType: 'audio/pcm;rate=16000',
   };
 }
+
+export const getApiKey = (): string | undefined => {
+  // 1. Direct process.env access (Standard Node/Webpack/Parcel)
+  if (typeof process !== 'undefined' && process.env) {
+    if (process.env.API_KEY) return process.env.API_KEY;
+    if (process.env.REACT_APP_API_KEY) return process.env.REACT_APP_API_KEY;
+    if (process.env.NEXT_PUBLIC_API_KEY) return process.env.NEXT_PUBLIC_API_KEY;
+  }
+
+  // 2. Vite (import.meta.env)
+  // @ts-ignore
+  if (typeof import.meta !== 'undefined' && import.meta.env) {
+    // @ts-ignore
+    if (import.meta.env.VITE_API_KEY) return import.meta.env.VITE_API_KEY;
+    // @ts-ignore
+    if (import.meta.env.API_KEY) return import.meta.env.API_KEY;
+  }
+
+  // 3. Global Fallback
+  if ((window as any).API_KEY) return (window as any).API_KEY;
+  
+  return undefined;
+};

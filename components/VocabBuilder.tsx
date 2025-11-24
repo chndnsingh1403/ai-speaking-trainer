@@ -1,17 +1,27 @@
 import React, { useState } from 'react';
 import { GoogleGenAI, Type, Schema } from '@google/genai';
 import { VocabItem } from '../types';
-import { Search, Plus, RefreshCw } from 'lucide-react';
+import { getApiKey } from '../services/audioUtils';
+import { Search, Plus, RefreshCw, AlertCircle } from 'lucide-react';
 
 const VocabBuilder: React.FC = () => {
   const [topic, setTopic] = useState('');
   const [vocabList, setVocabList] = useState<VocabItem[]>([]);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const generateVocab = async () => {
     if (!topic.trim()) return;
+    
+    const apiKey = getApiKey();
+    if (!apiKey) {
+      setError("API Key missing. Please check your settings.");
+      return;
+    }
+
     setLoading(true);
-    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+    setError(null);
+    const ai = new GoogleGenAI({ apiKey });
 
     const schema: Schema = {
       type: Type.OBJECT,
@@ -47,6 +57,7 @@ const VocabBuilder: React.FC = () => {
       }
     } catch (e) {
       console.error(e);
+      setError("Failed to generate vocabulary. Please try again.");
     } finally {
       setLoading(false);
     }
@@ -76,6 +87,12 @@ const VocabBuilder: React.FC = () => {
                 <span className="ml-2 hidden sm:inline">Generate</span>
             </button>
         </div>
+        {error && (
+            <div className="mt-4 bg-red-500/20 text-red-100 p-3 rounded-lg flex items-center text-sm">
+                <AlertCircle className="w-4 h-4 mr-2" />
+                {error}
+            </div>
+        )}
       </div>
 
       {vocabList.length > 0 ? (

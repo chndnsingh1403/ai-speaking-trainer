@@ -1,8 +1,8 @@
-
 import React, { useState } from 'react';
 import { GoogleGenAI, Schema, Type } from '@google/genai';
 import { GRAMMAR_TOPICS } from '../constants';
-import { BookOpen, CheckCircle, XCircle, Lightbulb, GraduationCap, ArrowRight, RefreshCw, ChevronLeft } from 'lucide-react';
+import { getApiKey } from '../services/audioUtils';
+import { BookOpen, CheckCircle, XCircle, Lightbulb, GraduationCap, ArrowRight, RefreshCw, ChevronLeft, AlertCircle } from 'lucide-react';
 
 interface QuizQuestion {
   question: string;
@@ -22,6 +22,7 @@ const GrammarLab: React.FC = () => {
   const [topic, setTopic] = useState('');
   const [loading, setLoading] = useState(false);
   const [lesson, setLesson] = useState<GrammarLesson | null>(null);
+  const [error, setError] = useState<string | null>(null);
   
   // Quiz State
   const [selectedAnswers, setSelectedAnswers] = useState<{[key: number]: number}>({});
@@ -29,7 +30,15 @@ const GrammarLab: React.FC = () => {
 
   const generateLesson = async (selectedTopic: string) => {
     if (!selectedTopic.trim()) return;
+    
+    const apiKey = getApiKey();
+    if (!apiKey) {
+        setError("API Key not found.");
+        return;
+    }
+
     setLoading(true);
+    setError(null);
     setLesson(null);
     setSelectedAnswers({});
     setShowResults(false);
@@ -37,7 +46,7 @@ const GrammarLab: React.FC = () => {
     // Update input if clicked from preset
     setTopic(selectedTopic);
 
-    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+    const ai = new GoogleGenAI({ apiKey });
 
     const schema: Schema = {
       type: Type.OBJECT,
@@ -77,6 +86,7 @@ const GrammarLab: React.FC = () => {
       }
     } catch (e) {
       console.error(e);
+      setError("Failed to generate lesson. Please try again.");
     } finally {
       setLoading(false);
     }
@@ -127,6 +137,12 @@ const GrammarLab: React.FC = () => {
                     {loading ? <RefreshCw className="animate-spin w-5 h-5"/> : "Learn"}
                 </button>
             </div>
+            {error && (
+                <div className="mt-4 bg-red-500/20 text-red-100 p-3 rounded-lg flex items-center text-sm">
+                    <AlertCircle className="w-4 h-4 mr-2" />
+                    {error}
+                </div>
+            )}
         </div>
         
         {/* Decorative Circles */}

@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { GoogleGenAI, Type, Schema } from '@google/genai';
 import { ChatMessage, ConversationFeedback, VocabItem } from '../types';
+import { getApiKey } from '../services/audioUtils';
 import { Star, BookOpen, CheckCircle, AlertCircle, ArrowRight } from 'lucide-react';
 
 interface FeedbackReportProps {
@@ -11,6 +12,7 @@ interface FeedbackReportProps {
 const FeedbackReport: React.FC<FeedbackReportProps> = ({ transcripts, onBack }) => {
   const [feedback, setFeedback] = useState<ConversationFeedback | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     const generateFeedback = async () => {
@@ -20,7 +22,14 @@ const FeedbackReport: React.FC<FeedbackReportProps> = ({ transcripts, onBack }) 
         return;
       }
 
-      const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+      const apiKey = getApiKey();
+      if (!apiKey) {
+        setError("API Key not found.");
+        setLoading(false);
+        return;
+      }
+
+      const ai = new GoogleGenAI({ apiKey });
       
       const conversationText = transcripts
         .map(t => `${t.role}: ${t.text}`)
@@ -70,6 +79,7 @@ const FeedbackReport: React.FC<FeedbackReportProps> = ({ transcripts, onBack }) 
         }
       } catch (error) {
         console.error("Error generating feedback", error);
+        setError("Failed to generate feedback.");
       } finally {
         setLoading(false);
       }
@@ -84,6 +94,19 @@ const FeedbackReport: React.FC<FeedbackReportProps> = ({ transcripts, onBack }) 
       <div className="flex flex-col items-center justify-center h-96">
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mb-4"></div>
         <p className="text-gray-500 animate-pulse">Analyzing your conversation...</p>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="text-center p-8">
+        <div className="bg-red-50 text-red-600 p-4 rounded-lg inline-flex items-center mb-4">
+             <AlertCircle className="w-5 h-5 mr-2" /> {error}
+        </div>
+        <div>
+            <button onClick={onBack} className="text-blue-600 hover:underline">Return Home</button>
+        </div>
       </div>
     );
   }

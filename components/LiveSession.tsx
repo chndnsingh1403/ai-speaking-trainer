@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { GoogleGenAI, LiveServerMessage, Modality } from '@google/genai';
 import { ChatMessage, TopicPreset } from '../types';
 import { AUDIO_SAMPLE_RATE_INPUT, AUDIO_SAMPLE_RATE_OUTPUT } from '../constants';
-import { createPcmBlob, base64ToUint8Array, decodeAudioData } from '../services/audioUtils';
+import { createPcmBlob, base64ToUint8Array, decodeAudioData, getApiKey } from '../services/audioUtils';
 import AudioVisualizer from './AudioVisualizer';
 import { Mic, MicOff, PhoneOff, Loader2, MessageSquare, AlertCircle, Play } from 'lucide-react';
 
@@ -69,24 +69,11 @@ const LiveSession: React.FC<LiveSessionProps> = ({ topic, customTopic, onEndSess
     sourcesRef.current.clear();
   };
 
-  // Helper to safely get API Key
-  const getApiKey = () => {
-    // Check process.env first (standard)
-    if (process?.env?.API_KEY) return process.env.API_KEY;
-    // Fallback for Vite users who might have it in import.meta.env
-    // @ts-ignore
-    if (typeof import.meta !== 'undefined' && import.meta.env?.VITE_API_KEY) {
-        // @ts-ignore
-        return import.meta.env.VITE_API_KEY;
-    }
-    return null;
-  };
-
   const startSession = async () => {
     const apiKey = getApiKey();
     if (!apiKey) {
         setStatus('error');
-        setError("API Key not found. Please add API_KEY to your environment variables.");
+        setError("API Key not found. If on Vercel, try naming it NEXT_PUBLIC_API_KEY.");
         return;
     }
 
