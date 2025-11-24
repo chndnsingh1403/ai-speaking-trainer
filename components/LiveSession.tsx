@@ -73,7 +73,7 @@ const LiveSession: React.FC<LiveSessionProps> = ({ topic, customTopic, onEndSess
     const apiKey = getApiKey();
     if (!apiKey) {
         setStatus('error');
-        setError("API Key not found. If on Vercel, try naming it NEXT_PUBLIC_API_KEY.");
+        setError("API Key missing. On Vercel? Rename 'API_KEY' to 'NEXT_PUBLIC_API_KEY' in settings.");
         return;
     }
 
@@ -236,7 +236,7 @@ const LiveSession: React.FC<LiveSessionProps> = ({ topic, customTopic, onEndSess
       console.error("Connection failure:", err);
       if (mountedRef.current) {
            setStatus('error');
-           setError("Failed to connect. Ensure your API Key is valid and supports Gemini 2.5 Flash Live.");
+           setError("Connection failed. Vercel users: Ensure API key is named NEXT_PUBLIC_API_KEY.");
            if (stream) stream.getTracks().forEach(t => t.stop());
       }
     }
