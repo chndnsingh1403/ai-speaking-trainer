@@ -14,7 +14,10 @@ const AudioVisualizer: React.FC<AudioVisualizerProps> = ({ stream, isActive, isS
 
   useEffect(() => {
     if (!isActive || !stream) {
-        if (requestRef.current) cancelAnimationFrame(requestRef.current);
+        if (requestRef.current !== null) {
+            cancelAnimationFrame(requestRef.current);
+            requestRef.current = null;
+        }
         return;
     }
 
@@ -24,8 +27,15 @@ const AudioVisualizer: React.FC<AudioVisualizerProps> = ({ stream, isActive, isS
     analyser.fftSize = 256;
     analyserRef.current = analyser;
 
-    const source = audioCtx.createMediaStreamSource(stream);
-    source.connect(analyser);
+    // Connect stream to analyser
+    let source: MediaStreamAudioSourceNode | null = null;
+    try {
+        source = audioCtx.createMediaStreamSource(stream);
+        source.connect(analyser);
+    } catch (e) {
+        console.error("Error creating media source for visualizer", e);
+        return;
+    }
 
     const animate = () => {
       if (!canvasRef.current || !analyserRef.current) return;
@@ -69,8 +79,12 @@ const AudioVisualizer: React.FC<AudioVisualizerProps> = ({ stream, isActive, isS
     animate();
 
     return () => {
-      if (requestRef.current) cancelAnimationFrame(requestRef.current);
-      audioCtx.close();
+      if (requestRef.current !== null) {
+          cancelAnimationFrame(requestRef.current);
+      }
+      if (contextRef.current && contextRef.current.state !== 'closed') {
+          contextRef.current.close();
+      }
     };
   }, [isActive, stream, isSpeaking]);
 

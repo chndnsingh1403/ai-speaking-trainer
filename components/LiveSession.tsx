@@ -4,7 +4,7 @@ import { ChatMessage, TopicPreset } from '../types';
 import { AUDIO_SAMPLE_RATE_INPUT, AUDIO_SAMPLE_RATE_OUTPUT } from '../constants';
 import { createPcmBlob, base64ToUint8Array, decodeAudioData } from '../services/audioUtils';
 import AudioVisualizer from './AudioVisualizer';
-import { Mic, MicOff, PhoneOff, Loader2, MessageSquare } from 'lucide-react';
+import { Mic, MicOff, PhoneOff, Loader2, MessageSquare, AlertCircle, Play } from 'lucide-react';
 
 interface LiveSessionProps {
   topic: TopicPreset;
@@ -13,7 +13,7 @@ interface LiveSessionProps {
 }
 
 const LiveSession: React.FC<LiveSessionProps> = ({ topic, customTopic, onEndSession }) => {
-  const [isConnected, setIsConnected] = useState(false);
+  const [status, setStatus] = useState<'idle' | 'connecting' | 'connected' | 'error'>('idle');
   const [isMuted, setIsMuted] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [transcripts, setTranscripts] = useState<ChatMessage[]>([]);
@@ -39,7 +39,6 @@ const LiveSession: React.FC<LiveSessionProps> = ({ topic, customTopic, onEndSess
 
   useEffect(() => {
     mountedRef.current = true;
-    startSession();
     return () => {
       mountedRef.current = false;
       cleanupSession();
@@ -48,7 +47,6 @@ const LiveSession: React.FC<LiveSessionProps> = ({ topic, customTopic, onEndSess
   }, []);
 
   const cleanupSession = () => {
-    // Stop microphone first
     if (mediaStream) {
         mediaStream.getTracks().forEach(track => track.stop());
     }
@@ -58,7 +56,6 @@ const LiveSession: React.FC<LiveSessionProps> = ({ topic, customTopic, onEndSess
        sessionRef.current = null;
     }
 
-    // Close Audio Contexts
     if (inputAudioContextRef.current && inputAudioContextRef.current.state !== 'closed') {
         inputAudioContextRef.current.close();
     }
@@ -66,42 +63,78 @@ const LiveSession: React.FC<LiveSessionProps> = ({ topic, customTopic, onEndSess
         outputAudioContextRef.current.close();
     }
 
-    // Stop all sources
     sourcesRef.current.forEach(source => {
         try { source.stop(); } catch(e) {}
     });
     sourcesRef.current.clear();
   };
 
+  // Helper to safely get API Key
+  const getApiKey = () => {
+    // Check process.env first (standard)
+    if (process?.env?.API_KEY) return process.env.API_KEY;
+    // Fallback for Vite users who might have it in import.meta.env
+    // @ts-ignore
+    if (typeof import.meta !== 'undefined' && import.meta.env?.VITE_API_KEY) {
+        // @ts-ignore
+        return import.meta.env.VITE_API_KEY;
+    }
+    return null;
+  };
+
   const startSession = async () => {
+    const apiKey = getApiKey();
+    if (!apiKey) {
+        setStatus('error');
+        setError("API Key not found. Please add API_KEY to your environment variables.");
+        return;
+    }
+
+    let stream: MediaStream | undefined = undefined;
+
     try {
+      setStatus('connecting');
       setError(null);
       
-      // Initialize Audio Contexts
+      // 1. Initialize Audio Contexts (Must happen after user interaction)
       const inputCtx = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: AUDIO_SAMPLE_RATE_INPUT });
       const outputCtx = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: AUDIO_SAMPLE_RATE_OUTPUT });
+      
+      // Resume immediately in case they are suspended
+      await inputCtx.resume();
+      await outputCtx.resume();
+
       inputAudioContextRef.current = inputCtx;
       outputAudioContextRef.current = outputCtx;
 
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      // 2. Get Microphone Access
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      } catch (err) {
+        console.error("Microphone access denied:", err);
+        if (mountedRef.current) {
+            setStatus('error');
+            setError("Microphone access denied. Please check browser permissions.");
+        }
+        return;
+      }
+      
+      if (!stream) return;
+
       if (!mountedRef.current) {
-          // Clean up if unmounted during await
           stream.getTracks().forEach(t => t.stop());
-          inputCtx.close();
-          outputCtx.close();
           return;
       }
       setMediaStream(stream);
 
-      const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+      // 3. Connect to Gemini API
+      const ai = new GoogleGenAI({ apiKey });
       
       const systemInstruction = customTopic 
         ? `You are an English tutor. The user wants to talk about: "${customTopic}". Engage them, correct major mistakes gently, and keep the conversation flowing.`
         : topic.systemPrompt;
 
-      const sessionPromise = ai.live.connect({
-        model: 'gemini-2.5-flash-native-audio-preview-09-2025',
-        config: {
+      const config = {
           responseModalities: [Modality.AUDIO],
           speechConfig: {
             voiceConfig: { prebuiltVoiceConfig: { voiceName: 'Puck' } },
@@ -109,13 +142,16 @@ const LiveSession: React.FC<LiveSessionProps> = ({ topic, customTopic, onEndSess
           systemInstruction: systemInstruction,
           inputAudioTranscription: {}, 
           outputAudioTranscription: {}, 
-        },
+      };
+
+      const sessionPromise = ai.live.connect({
+        model: 'gemini-2.5-flash-native-audio-preview-09-2025',
+        config: config,
         callbacks: {
           onopen: () => {
-            if (!mountedRef.current || inputCtx.state === 'closed') return;
-            setIsConnected(true);
+            if (!mountedRef.current || inputCtx.state === 'closed' || !stream) return;
+            setStatus('connected');
             
-            // Setup Input Streaming
             const source = inputCtx.createMediaStreamSource(stream);
             const scriptProcessor = inputCtx.createScriptProcessor(4096, 1, 1);
             
@@ -127,7 +163,7 @@ const LiveSession: React.FC<LiveSessionProps> = ({ topic, customTopic, onEndSess
               
               sessionPromise.then((session) => {
                   try {
-                    session.sendRealtimeInput({ media: pcmBlob });
+                      session.sendRealtimeInput({ media: pcmBlob });
                   } catch(err) {
                       // Session might be closed
                   }
@@ -138,45 +174,36 @@ const LiveSession: React.FC<LiveSessionProps> = ({ topic, customTopic, onEndSess
             scriptProcessor.connect(inputCtx.destination);
           },
           onmessage: async (message: LiveServerMessage) => {
-             if (!mountedRef.current) return;
+            if (!mountedRef.current) return;
 
-            // Handle Audio Output
+            // Audio
             const base64Audio = message.serverContent?.modelTurn?.parts?.[0]?.inlineData?.data;
             if (base64Audio) {
               setIsAiSpeaking(true);
               const outputCtx = outputAudioContextRef.current;
-              if (!outputCtx || outputCtx.state === 'closed') return;
-
-              // Sync Playback
-              nextStartTimeRef.current = Math.max(nextStartTimeRef.current, outputCtx.currentTime);
-              
-              const audioBuffer = await decodeAudioData(
-                base64ToUint8Array(base64Audio),
-                outputCtx,
-                AUDIO_SAMPLE_RATE_OUTPUT,
-                1
-              );
-
-              const source = outputCtx.createBufferSource();
-              source.buffer = audioBuffer;
-              source.connect(outputCtx.destination);
-              
-              source.addEventListener('ended', () => {
-                sourcesRef.current.delete(source);
-                if (sourcesRef.current.size === 0) setIsAiSpeaking(false);
-              });
-
-              source.start(nextStartTimeRef.current);
-              nextStartTimeRef.current += audioBuffer.duration;
-              sourcesRef.current.add(source);
+              if (outputCtx && outputCtx.state !== 'closed') {
+                nextStartTimeRef.current = Math.max(nextStartTimeRef.current, outputCtx.currentTime);
+                const audioBuffer = await decodeAudioData(base64ToUint8Array(base64Audio), outputCtx, AUDIO_SAMPLE_RATE_OUTPUT, 1);
+                
+                const source = outputCtx.createBufferSource();
+                source.buffer = audioBuffer;
+                source.connect(outputCtx.destination);
+                source.addEventListener('ended', () => {
+                    sourcesRef.current.delete(source);
+                    if (sourcesRef.current.size === 0) setIsAiSpeaking(false);
+                });
+                source.start(nextStartTimeRef.current);
+                nextStartTimeRef.current += audioBuffer.duration;
+                sourcesRef.current.add(source);
+              }
             }
 
-            // Handle Transcripts
+            // Transcripts
             const outputTx = message.serverContent?.outputTranscription?.text;
             const inputTx = message.serverContent?.inputTranscription?.text;
             
             if (message.serverContent?.turnComplete) {
-                 setIsAiSpeaking(false);
+                setIsAiSpeaking(false);
             }
             
             if (inputTx) {
@@ -189,7 +216,7 @@ const LiveSession: React.FC<LiveSessionProps> = ({ topic, customTopic, onEndSess
                 });
             }
             if (outputTx) {
-                 setTranscripts(prev => {
+                setTranscripts(prev => {
                     const last = prev[prev.length - 1];
                     if (last && last.role === 'model') {
                         return [...prev.slice(0, -1), { ...last, text: last.text + outputTx }];
@@ -199,29 +226,38 @@ const LiveSession: React.FC<LiveSessionProps> = ({ topic, customTopic, onEndSess
             }
           },
           onclose: () => {
-            if (mountedRef.current) setIsConnected(false);
+            if (mountedRef.current) setStatus('idle');
           },
           onerror: (e) => {
-            console.error(e);
+            console.error("Session error:", e);
             if (mountedRef.current) {
-                setError("Connection error occurred. Please check your API key and permissions.");
-                setIsConnected(false);
+                setError("Connection lost. Please check your API Key and internet.");
+                setStatus('error');
             }
           }
         }
       });
 
-      sessionRef.current = await sessionPromise;
+      const session = await sessionPromise;
+      if (!mountedRef.current) {
+          session.close();
+          return;
+      }
+      sessionRef.current = session;
 
-    } catch (err) {
-      console.error("Failed to start session", err);
-      if (mountedRef.current) setError("Failed to access microphone or connect to AI service.");
+    } catch (err: any) {
+      console.error("Connection failure:", err);
+      if (mountedRef.current) {
+           setStatus('error');
+           setError("Failed to connect. Ensure your API Key is valid and supports Gemini 2.5 Flash Live.");
+           if (stream) stream.getTracks().forEach(t => t.stop());
+      }
     }
   };
 
   const handleEndClick = () => {
     cleanupSession();
-    setIsConnected(false);
+    setStatus('idle');
     onEndSession(transcripts);
   };
 
@@ -229,17 +265,41 @@ const LiveSession: React.FC<LiveSessionProps> = ({ topic, customTopic, onEndSess
     setIsMuted(!isMuted);
   };
 
+  // Render idle start screen
+  if (status === 'idle' && !error && transcripts.length === 0) {
+      return (
+          <div className="flex flex-col items-center justify-center h-full bg-slate-900 rounded-2xl p-8 text-white">
+              <div className="w-20 h-20 bg-blue-600 rounded-full flex items-center justify-center mb-6 animate-pulse">
+                  <Mic size={40} />
+              </div>
+              <h2 className="text-2xl font-bold mb-2">{customTopic || topic.title}</h2>
+              <p className="text-slate-400 mb-8 text-center max-w-md">
+                  Ready to practice? Click start to enable your microphone and connect to the AI tutor.
+              </p>
+              <button 
+                  onClick={startSession}
+                  className="bg-white text-slate-900 px-8 py-3 rounded-full font-bold hover:bg-blue-50 transition-all flex items-center gap-2"
+              >
+                  <Play size={20} fill="currentColor" />
+                  Start Conversation
+              </button>
+          </div>
+      );
+  }
+
   return (
     <div className="flex flex-col h-full max-h-[80vh] relative">
       {/* Header */}
       <div className="flex items-center justify-between mb-4 bg-white p-4 rounded-xl shadow-sm">
         <div className="flex items-center gap-3">
-            <div className={`p-2 rounded-full ${isConnected ? 'bg-green-100 text-green-600' : 'bg-blue-100 text-blue-600'}`}>
-                {isConnected ? <div className="w-3 h-3 bg-green-500 rounded-full animate-pulse"/> : <Loader2 className="w-4 h-4 animate-spin"/>}
+            <div className={`p-2 rounded-full ${status === 'connected' ? 'bg-green-100 text-green-600' : 'bg-blue-100 text-blue-600'}`}>
+                {status === 'connected' ? <div className="w-3 h-3 bg-green-500 rounded-full animate-pulse"/> : <Loader2 className="w-4 h-4 animate-spin"/>}
             </div>
             <div>
                 <h2 className="font-semibold text-gray-800">{customTopic || topic.title}</h2>
-                <p className="text-xs text-gray-500">{isConnected ? 'Live Session Active' : 'Connecting...'}</p>
+                <p className="text-xs text-gray-500">
+                    {status === 'connected' ? 'Live Session Active' : status === 'connecting' ? 'Connecting...' : 'Disconnected'}
+                </p>
             </div>
         </div>
         <button 
@@ -266,7 +326,7 @@ const LiveSession: React.FC<LiveSessionProps> = ({ topic, customTopic, onEndSess
                     </div>
                 </div>
             ))}
-            {transcripts.length === 0 && (
+            {transcripts.length === 0 && status === 'connected' && (
                 <div className="text-center text-slate-500 mt-20">
                     <MessageSquare className="w-12 h-12 mx-auto mb-2 opacity-50"/>
                     <p>Start speaking to begin the conversation...</p>
@@ -279,7 +339,7 @@ const LiveSession: React.FC<LiveSessionProps> = ({ topic, customTopic, onEndSess
              <div className="w-full max-w-md mx-auto mb-6">
                 <AudioVisualizer 
                     stream={mediaStream} 
-                    isActive={isConnected} 
+                    isActive={status === 'connected'} 
                     isSpeaking={isAiSpeaking}
                 />
              </div>
@@ -288,20 +348,23 @@ const LiveSession: React.FC<LiveSessionProps> = ({ topic, customTopic, onEndSess
              <div className="flex justify-center gap-6">
                 <button 
                     onClick={toggleMute}
-                    className={`p-4 rounded-full transition-all ${isMuted ? 'bg-red-500 text-white shadow-lg shadow-red-500/30' : 'bg-slate-700 text-white hover:bg-slate-600'}`}
+                    disabled={status !== 'connected'}
+                    className={`p-4 rounded-full transition-all ${isMuted ? 'bg-red-500 text-white shadow-lg shadow-red-500/30' : 'bg-slate-700 text-white hover:bg-slate-600'} disabled:opacity-50`}
                 >
                     {isMuted ? <MicOff size={24}/> : <Mic size={24}/>}
                 </button>
              </div>
              <p className="text-center text-slate-400 text-xs mt-4">
-                {isMuted ? 'Microphone Muted' : isAiSpeaking ? 'AI is speaking...' : 'Listening...'}
+                {status === 'connecting' ? 'Establishing connection...' : isMuted ? 'Microphone Muted' : isAiSpeaking ? 'AI is speaking...' : 'Listening...'}
              </p>
         </div>
       </div>
       
       {error && (
-        <div className="absolute top-4 left-1/2 -translate-x-1/2 bg-red-100 text-red-700 px-4 py-2 rounded-full text-sm shadow-lg whitespace-nowrap">
-            {error}
+        <div className="absolute top-4 left-1/2 -translate-x-1/2 bg-red-100 text-red-700 px-4 py-3 rounded-xl text-sm shadow-lg flex items-center gap-2 max-w-[90%] z-50">
+            <AlertCircle className="w-5 h-5 flex-shrink-0" />
+            <span>{error}</span>
+            <button onClick={startSession} className="ml-2 underline font-bold">Retry</button>
         </div>
       )}
     </div>
