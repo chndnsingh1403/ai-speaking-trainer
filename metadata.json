@@ -1,0 +1,7 @@
+{
+  "name": "LinguaFlow AI",
+  "description": "An advanced AI-powered English language tutor focusing on conversational fluency, vocabulary expansion, and real-time feedback using Gemini Live.",
+  "requestFramePermissions": [
+    "microphone"
+  ]
+}
