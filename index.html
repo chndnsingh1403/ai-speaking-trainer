@@ -20,6 +20,11 @@
           scrollbar-width: none;
       }
     </style>
+    <script>
+      // Global polyfill for process.env to prevent runtime crashes and allow env var injection
+      window.process = window.process || {};
+      window.process.env = window.process.env || {};
+    </script>
   <script type="importmap">
 {
   "imports": {

@@ -1,3 +1,4 @@
+
 import React, { useEffect, useRef, useState } from 'react';
 import { GoogleGenAI, LiveServerMessage, Modality } from '@google/genai';
 import { ChatMessage, TopicPreset } from '../types';
@@ -72,8 +73,9 @@ const LiveSession: React.FC<LiveSessionProps> = ({ topic, customTopic, onEndSess
   const startSession = async () => {
     const apiKey = getApiKey();
     if (!apiKey) {
+        // Should be caught by App.tsx, but failsafe here
         setStatus('error');
-        setError("API Key missing. On Vercel? Rename 'API_KEY' to 'NEXT_PUBLIC_API_KEY' in settings.");
+        setError("API Key not found.");
         return;
     }
 
@@ -218,7 +220,7 @@ const LiveSession: React.FC<LiveSessionProps> = ({ topic, customTopic, onEndSess
           onerror: (e) => {
             console.error("Session error:", e);
             if (mountedRef.current) {
-                setError("Connection lost. Please check your API Key and internet.");
+                setError("Connection lost. Please check your internet connection.");
                 setStatus('error');
             }
           }
@@ -236,7 +238,7 @@ const LiveSession: React.FC<LiveSessionProps> = ({ topic, customTopic, onEndSess
       console.error("Connection failure:", err);
       if (mountedRef.current) {
            setStatus('error');
-           setError("Connection failed. Vercel users: Ensure API key is named NEXT_PUBLIC_API_KEY.");
+           setError("Unable to connect to AI service. Please try again.");
            if (stream) stream.getTracks().forEach(t => t.stop());
       }
     }

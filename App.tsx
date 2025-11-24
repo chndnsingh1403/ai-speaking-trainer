@@ -1,18 +1,26 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { AppMode, ChatMessage, TopicPreset } from './types';
 import { TOPIC_PRESETS } from './constants';
 import LiveSession from './components/LiveSession';
 import FeedbackReport from './components/FeedbackReport';
 import VocabBuilder from './components/VocabBuilder';
 import GrammarLab from './components/GrammarLab';
-import { MessageCircle, Book, Sparkles, ArrowRight, GraduationCap } from 'lucide-react';
+import { getApiKey } from './services/audioUtils';
+import { MessageCircle, Book, Sparkles, ArrowRight, GraduationCap, AlertCircle } from 'lucide-react';
 
 const App: React.FC = () => {
   const [mode, setMode] = useState<AppMode>(AppMode.HOME);
   const [selectedTopic, setSelectedTopic] = useState<TopicPreset | null>(null);
   const [customTopic, setCustomTopic] = useState('');
   const [sessionTranscripts, setSessionTranscripts] = useState<ChatMessage[]>([]);
+  const [hasApiKey, setHasApiKey] = useState<boolean>(true);
+
+  // Check for API Key on mount
+  useEffect(() => {
+    const key = getApiKey();
+    setHasApiKey(!!key);
+  }, []);
 
   const startConversation = (topic: TopicPreset) => {
     setSelectedTopic(topic);
@@ -34,6 +42,52 @@ const App: React.FC = () => {
       setMode(AppMode.HOME); // Reset mode base
       setShowFeedback(true); // Enable feedback overlay/view
   };
+
+  if (!hasApiKey) {
+      return (
+        <div className="min-h-screen flex items-center justify-center bg-slate-50 p-4 font-sans">
+            <div className="max-w-md w-full bg-white rounded-2xl shadow-xl p-8 border border-red-100">
+                <div className="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center mb-4 text-red-600 mx-auto">
+                    <AlertCircle size={24} />
+                </div>
+                <h1 className="text-xl font-bold text-slate-900 mb-2 text-center">Setup Required</h1>
+                <p className="text-slate-600 mb-6 text-sm text-center">
+                    The application could not detect an API Key.
+                </p>
+                <div className="bg-slate-50 rounded-lg p-4 mb-6 text-xs font-mono text-slate-700 space-y-2 border border-slate-200">
+                    <p className="font-bold text-slate-500 mb-2 border-b border-slate-200 pb-1">Missing Environment Variables:</p>
+                    <div className="flex justify-between opacity-50">
+                        <span>NEXT_PUBLIC_API_KEY</span>
+                        <span>undefined</span>
+                    </div>
+                    <div className="flex justify-between opacity-50">
+                        <span>VITE_API_KEY</span>
+                        <span>undefined</span>
+                    </div>
+                    <div className="flex justify-between opacity-50">
+                        <span>REACT_APP_API_KEY</span>
+                        <span>undefined</span>
+                    </div>
+                </div>
+                <div className="space-y-4 text-sm text-slate-600 bg-blue-50 p-4 rounded-xl border border-blue-100">
+                    <p className="font-semibold text-blue-800">How to fix on Vercel:</p>
+                    <ol className="list-decimal pl-5 space-y-1 text-blue-700">
+                        <li>Go to <strong>Settings</strong> &rarr; <strong>Environment Variables</strong>.</li>
+                        <li>Add a new variable named <code className="bg-white px-1 py-0.5 rounded border border-blue-200 font-mono text-xs">NEXT_PUBLIC_API_KEY</code>.</li>
+                        <li>Paste your Gemini API Key as the value.</li>
+                        <li><strong>Important:</strong> Redeploy your project for changes to take effect.</li>
+                    </ol>
+                </div>
+                <button 
+                    onClick={() => window.location.reload()}
+                    className="w-full mt-6 bg-slate-900 text-white py-3 rounded-lg font-medium hover:bg-slate-800 transition-colors"
+                >
+                    I've Redeployed, Refresh Page
+                </button>
+            </div>
+        </div>
+      );
+  }
 
   if (showFeedback) {
       return <FeedbackReport transcripts={sessionTranscripts} onBack={() => setShowFeedback(false)} />;
