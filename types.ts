@@ -4,6 +4,7 @@ export enum AppMode {
   CONVERSATION = 'CONVERSATION',
   VOCAB = 'VOCAB',
   GRAMMAR = 'GRAMMAR',
+  SPEECH_PRACTICE = 'SPEECH_PRACTICE',
 }
 
 export interface ChatMessage {
@@ -33,3 +34,15 @@ export interface TopicPreset {
   icon: string;
   systemPrompt: string;
 }
+
+export interface SpeechAnalysis {
+  score: number; // 1-10
+  pronunciation: string;
+  grammar: string;
+  vocabulary: string;
+  fluency: string;
+  improvements: string[];
+  strengths: string[];
+  transcription: string;
+}
+

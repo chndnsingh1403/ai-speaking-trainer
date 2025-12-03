@@ -6,8 +6,9 @@ import LiveSession from './components/LiveSession';
 import FeedbackReport from './components/FeedbackReport';
 import VocabBuilder from './components/VocabBuilder';
 import GrammarLab from './components/GrammarLab';
+import SpeechPractice from './components/SpeechPractice';
 import { getApiKey } from './services/audioUtils';
-import { MessageCircle, Book, Sparkles, ArrowRight, GraduationCap, AlertCircle } from 'lucide-react';
+import { MessageCircle, Book, Sparkles, ArrowRight, GraduationCap, AlertCircle, Volume2 } from 'lucide-react';
 
 const App: React.FC = () => {
   const [mode, setMode] = useState<AppMode>(AppMode.HOME);
@@ -107,7 +108,7 @@ const App: React.FC = () => {
         </p>
       </header>
 
-      <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8 mb-16">
+      <div className="grid md:grid-cols-2 gap-8 mb-16">
         {/* Conversation Card */}
         <div className="bg-white p-8 rounded-3xl shadow-sm border border-slate-100 hover:shadow-md transition-all lg:col-span-1">
             <div className="w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center text-blue-600 mb-6">
@@ -149,6 +150,29 @@ const App: React.FC = () => {
                         Go
                     </button>
                 </div>
+            </div>
+        </div>
+
+        {/* Speech Practice Card */}
+        <div className="bg-white p-8 rounded-3xl shadow-sm border border-slate-100 hover:shadow-md transition-all flex flex-col">
+            <div className="w-12 h-12 bg-rose-100 rounded-xl flex items-center justify-center text-rose-600 mb-6">
+                <Volume2 size={24} />
+            </div>
+            <h2 className="text-2xl font-bold text-slate-800 mb-2">Speech Practice</h2>
+            <p className="text-slate-500 mb-6 text-sm">Speak freely and get detailed AI feedback on your performance.</p>
+            
+            <div className="flex-1 bg-gradient-to-br from-rose-50 to-pink-50 rounded-2xl p-6 flex flex-col items-center justify-center text-center border border-rose-100">
+                <div className="bg-white p-3 rounded-full shadow-sm mb-4">
+                     <Volume2 className="w-8 h-8 text-rose-500" />
+                </div>
+                <p className="text-rose-800 font-medium mb-1">Practice Speaking</p>
+                <p className="text-rose-600 text-xs mb-6">Get Instant Feedback</p>
+                <button 
+                    onClick={() => setMode(AppMode.SPEECH_PRACTICE)}
+                    className="w-full bg-white border border-rose-200 text-rose-700 px-6 py-2 rounded-lg font-medium hover:bg-rose-600 hover:text-white transition-all shadow-sm text-sm"
+                >
+                    Start Practice
+                </button>
             </div>
         </div>
 
@@ -235,6 +259,7 @@ const App: React.FC = () => {
         )}
         {mode === AppMode.VOCAB && <VocabBuilder />}
         {mode === AppMode.GRAMMAR && <GrammarLab />}
+        {mode === AppMode.SPEECH_PRACTICE && <SpeechPractice />}
       </main>
     </div>
   );
